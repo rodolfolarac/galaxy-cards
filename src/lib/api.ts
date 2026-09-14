@@ -83,7 +83,13 @@ export const api = {
     sessionId: number,
     body: { cardId: number; rating: Rating; elapsedMs: number; sessionElapsedMs: number },
   ) =>
-    request<{ card: Card; session: StudySession; nextIn: string; leftDeck: boolean }>(
+    request<{
+      card: Card;
+      session: StudySession;
+      nextIn: string;
+      leftDeck: boolean;
+      retired: boolean;
+    }>(
       `/study/sessions/${sessionId}/review`,
       { method: 'POST', body: JSON.stringify(body) },
     ),

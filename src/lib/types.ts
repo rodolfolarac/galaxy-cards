@@ -5,7 +5,6 @@ export interface Card {
   phrase: string | null;
   phraseTranslation: string | null;
   notes: string | null;
-  ease: number;
   intervalDays: number;
   dueAt: string;
   easyCount: number;
@@ -13,6 +12,8 @@ export interface Card {
   reviewCount: number;
   streak: number;
   mastered: boolean;
+  /** Chegou aos 60 dias: não volta ao baralho até você devolver pelo painel. */
+  retired: boolean;
   archived: boolean;
   lastReviewedAt: string | null;
   createdAt: string;
@@ -36,6 +37,7 @@ export interface StudySession {
 export interface Summary {
   registered: number;
   mastered: number;
+  permanent: number;
   archived: number;
   dueNow: number;
   learning: number;

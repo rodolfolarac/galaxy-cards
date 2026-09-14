@@ -21,6 +21,7 @@ const FILTERS = [
   { id: 'due', label: 'No baralho' },
   { id: 'learning', label: 'Aprendendo' },
   { id: 'mastered', label: 'Memorizadas' },
+  { id: 'permanent', label: 'Permanentes' },
   { id: 'archived', label: 'Arquivadas' },
 ] as const;
 
@@ -311,12 +312,17 @@ export function CardsView({ onChanged }: { onChanged: () => void }) {
                 <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-faint">
                   {card.archived ? (
                     <span className="text-rose-300/80">arquivada</span>
+                  ) : card.retired ? (
+                    <span className="text-nebula-soft">permanente · 60 dias alcançados</span>
                   ) : (
                     <span className={card.mastered ? 'text-cyan' : undefined}>
                       {card.mastered ? 'memorizada' : 'aprendendo'}
                     </span>
                   )}
-                  {!card.archived && <span>· {relativeDue(card.dueAt)}</span>}
+                  {!card.archived && !card.retired && <span>· {relativeDue(card.dueAt)}</span>}
+                  {!card.archived && !card.retired && card.streak > 0 && (
+                    <span>· {card.streak} de 4 acertos seguidos</span>
+                  )}
                   {card.reviewCount > 0 && (
                     <span>
                       · {card.easyCount} fácil / {card.hardCount} difícil
@@ -330,7 +336,12 @@ export function CardsView({ onChanged }: { onChanged: () => void }) {
                   <Pencil aria-hidden className="size-4" />
                 </IconAction>
                 <IconAction
-                  label="Devolver ao baralho de hoje"
+                  label={
+                    card.retired
+                      ? 'Tirar de permanente e devolver ao baralho'
+                      : 'Devolver ao baralho de hoje'
+                  }
+                  highlight={card.retired}
                   onClick={() => act(() => api.resetCard(card.id), `“${card.word}” voltou ao baralho.`)}
                 >
                   <RotateCcw aria-hidden className="size-4" />
@@ -379,11 +390,14 @@ function IconAction({
   label,
   onClick,
   danger,
+  highlight,
   children,
 }: {
   label: string;
   onClick: () => void;
   danger?: boolean;
+  /** Destaca a ação quando ela é a saída natural daquele estado. */
+  highlight?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -393,7 +407,11 @@ function IconAction({
       aria-label={label}
       className={cx(
         'rounded-lg p-2 transition-colors',
-        danger ? 'text-faint hover:bg-rose-500/15 hover:text-rose-300' : 'text-faint hover:bg-white/8 hover:text-starlight',
+        danger
+          ? 'text-faint hover:bg-rose-500/15 hover:text-rose-300'
+          : highlight
+            ? 'text-nebula-soft hover:bg-nebula/20 hover:text-starlight'
+            : 'text-faint hover:bg-white/8 hover:text-starlight',
       )}
     >
       {children}

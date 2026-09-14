@@ -10,9 +10,9 @@ import {
 } from 'drizzle-orm/pg-core';
 
 /**
- * Um card = uma palavra em inglês + tradução, opcionalmente com uma frase
- * de exemplo e a tradução dela. Os campos de SRS (ease/intervalDays/dueAt)
- * controlam quando o card volta a aparecer no baralho.
+ * Um card = uma palavra ou frase em inglês + tradução, opcionalmente com
+ * uma frase de exemplo e a tradução dela. Os campos de SRS
+ * (streak/intervalDays/dueAt) controlam quando o card volta ao baralho.
  */
 export const cards = pgTable(
   'cards',
@@ -26,9 +26,7 @@ export const cards = pgTable(
     notes: text('notes'),
 
     // --- SRS ---
-    /** Fator de facilidade no estilo SM-2. Começa em 2.5, nunca abaixo de 1.3. */
-    ease: real('ease').notNull().default(2.5),
-    /** Intervalo atual em dias. 0 = ainda está no baralho de hoje. */
+    /** Intervalo atual em dias: 0, 15, 30, 45 ou 60. */
     intervalDays: real('interval_days').notNull().default(0),
     /** Quando o card volta a ficar disponível. Passado/agora = está no baralho. */
     dueAt: timestamp('due_at', { withTimezone: true }).notNull().defaultNow(),
@@ -39,9 +37,14 @@ export const cards = pgTable(
     /** Sequência atual de "fácil" seguidos. Zera ao marcar difícil. */
     streak: integer('streak').notNull().default(0),
 
-    /** true quando o intervalo passou do limiar de memorização (>= 7 dias). */
+    /** true quando o intervalo passou do limiar de memorização (>= 15 dias). */
     mastered: boolean('mastered').notNull().default(false),
-    /** Arquivado manualmente: sai do baralho para sempre, mas fica no histórico. */
+    /**
+     * Permanente: a carta chegou aos 60 dias e não volta mais ao baralho
+     * sozinha. Só retorna se for devolvida pelo painel.
+     */
+    retired: boolean('retired').notNull().default(false),
+    /** Arquivado manualmente: sai do baralho, mas fica no histórico. */
     archived: boolean('archived').notNull().default(false),
 
     lastReviewedAt: timestamp('last_reviewed_at', { withTimezone: true }),
@@ -51,6 +54,7 @@ export const cards = pgTable(
   (t) => [
     index('cards_due_idx').on(t.dueAt),
     index('cards_archived_idx').on(t.archived),
+    index('cards_retired_idx').on(t.retired),
   ],
 );
 

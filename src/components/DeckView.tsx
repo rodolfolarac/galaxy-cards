@@ -46,6 +46,7 @@ export function DeckView({
   const due = available?.due ?? 0;
   const registered = summary?.registered ?? 0;
   const mastered = summary?.mastered ?? 0;
+  const permanent = summary?.permanent ?? 0;
   const deckSize = size === null ? due : Math.min(size, due);
   const short = size !== null && due < size && due > 0;
 
@@ -84,6 +85,14 @@ export function DeckView({
               value={registered}
               label={registered === 1 ? 'palavra cadastrada' : 'palavras cadastradas'}
             />
+            {permanent > 0 && (
+              <p className="text-sm text-dust">
+                <span className="text-nebula-soft">{permanent}</span>{' '}
+                {permanent === 1
+                  ? 'chegou aos 60 dias e saiu do baralho de vez'
+                  : 'chegaram aos 60 dias e saíram do baralho de vez'}
+              </p>
+            )}
             {due > 0 && (
               <p className="text-sm text-dust">
                 <span className="text-amber">{due}</span>{' '}
@@ -98,7 +107,8 @@ export function DeckView({
       <Panel className="p-6 sm:p-8">
         <h2 className="font-reader text-2xl leading-tight">Quantas cartas nesta rodada?</h2>
         <p className="mt-1.5 text-sm text-dust">
-          A ordem é sempre sorteada. Cartas marcadas como fáceis só voltam depois do prazo.
+          A ordem é sempre sorteada. Cada “fácil” seguido afasta a carta mais 15 dias — 15, 30,
+          45, 60 — e aos 60 ela sai do baralho de vez.
         </p>
 
         <div className="mt-5 flex flex-wrap gap-2">

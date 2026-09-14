@@ -24,7 +24,7 @@ studyRouter.get('/available', async (_req, res) => {
       total: sql<number>`count(*)`,
     })
     .from(cards)
-    .where(eq(cards.archived, false));
+    .where(and(eq(cards.archived, false), eq(cards.retired, false)));
 
   res.json({ due: Number(row?.due ?? 0), total: Number(row?.total ?? 0) });
 });
@@ -82,7 +82,7 @@ studyRouter.post('/open', async (req, res) => {
   const dueCards = await db
     .select()
     .from(cards)
-    .where(and(eq(cards.archived, false), lte(cards.dueAt, now)));
+    .where(and(eq(cards.archived, false), eq(cards.retired, false), lte(cards.dueAt, now)));
 
   let deck = shuffle(dueCards);
 
@@ -91,7 +91,7 @@ studyRouter.post('/open', async (req, res) => {
     const extra = await db
       .select()
       .from(cards)
-      .where(eq(cards.archived, false))
+      .where(and(eq(cards.archived, false), eq(cards.retired, false)))
       .orderBy(asc(cards.dueAt))
       .limit(requested * 2);
     for (const c of extra) {
@@ -106,7 +106,7 @@ studyRouter.post('/open', async (req, res) => {
   if (!deck.length) {
     res.status(409).json({
       error:
-        'Nenhuma carta disponível agora. Todas as palavras já foram marcadas como fáceis e voltam nos próximos dias.',
+        'Nenhuma carta disponível agora. As palavras que você marcou como fáceis voltam nos próximos dias.',
     });
     return;
   }
@@ -144,20 +144,16 @@ studyRouter.post('/sessions/:id/review', async (req, res) => {
   if (!card) { res.status(404).json({ error: 'Card não encontrado.' }); return; }
 
   const now = new Date();
-  const next = schedule(
-    { ease: card.ease, intervalDays: card.intervalDays, streak: card.streak },
-    rating,
-    now,
-  );
+  const next = schedule({ intervalDays: card.intervalDays, streak: card.streak }, rating, now);
 
   const [updated] = await db
     .update(cards)
     .set({
-      ease: next.ease,
       intervalDays: next.intervalDays,
       streak: next.streak,
       dueAt: next.dueAt,
       mastered: next.mastered,
+      retired: next.retired,
       lastReviewedAt: now,
       reviewCount: card.reviewCount + 1,
       easyCount: card.easyCount + (rating === 'easy' ? 1 : 0),
@@ -194,6 +190,7 @@ studyRouter.post('/sessions/:id/review', async (req, res) => {
     session,
     nextIn: describeInterval(next.intervalDays),
     leftDeck: next.leftDeck,
+    retired: next.retired,
   });
 });
 

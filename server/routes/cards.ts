@@ -33,9 +33,14 @@ cardsRouter.get('/', async (req, res) => {
       ),
     );
   }
-  if (filter === 'mastered') conds.push(eq(cards.mastered, true));
-  if (filter === 'learning') conds.push(and(eq(cards.mastered, false), eq(cards.archived, false))!);
-  if (filter === 'due') conds.push(and(eq(cards.archived, false), lte(cards.dueAt, new Date()))!);
+  if (filter === 'mastered') conds.push(and(eq(cards.mastered, true), eq(cards.retired, false))!);
+  if (filter === 'permanent') conds.push(eq(cards.retired, true));
+  if (filter === 'learning')
+    conds.push(and(eq(cards.mastered, false), eq(cards.archived, false), eq(cards.retired, false))!);
+  if (filter === 'due')
+    conds.push(
+      and(eq(cards.archived, false), eq(cards.retired, false), lte(cards.dueAt, new Date()))!,
+    );
   if (filter === 'archived') conds.push(eq(cards.archived, true));
   else if (filter !== 'all') conds.push(eq(cards.archived, false));
 
@@ -55,15 +60,17 @@ cardsRouter.get('/summary', async (_req, res) => {
     .select({
       registered: count(),
       mastered: sql<number>`count(*) filter (where ${cards.mastered} and not ${cards.archived})`,
+      permanent: sql<number>`count(*) filter (where ${cards.retired} and not ${cards.archived})`,
       archived: sql<number>`count(*) filter (where ${cards.archived})`,
-      dueNow: sql<number>`count(*) filter (where not ${cards.archived} and ${cards.dueAt} <= now())`,
-      learning: sql<number>`count(*) filter (where not ${cards.archived} and not ${cards.mastered})`,
+      dueNow: sql<number>`count(*) filter (where not ${cards.archived} and not ${cards.retired} and ${cards.dueAt} <= now())`,
+      learning: sql<number>`count(*) filter (where not ${cards.archived} and not ${cards.retired} and not ${cards.mastered})`,
     })
     .from(cards);
 
   res.json({
     registered: Number(row?.registered ?? 0),
     mastered: Number(row?.mastered ?? 0),
+    permanent: Number(row?.permanent ?? 0),
     archived: Number(row?.archived ?? 0),
     dueNow: Number(row?.dueNow ?? 0),
     learning: Number(row?.learning ?? 0),
@@ -170,10 +177,10 @@ cardsRouter.post('/:id/reset', async (req, res) => {
   const [row] = await db
     .update(cards)
     .set({
-      ease: 2.5,
       intervalDays: 0,
       streak: 0,
       mastered: false,
+      retired: false,
       dueAt: new Date(),
       updatedAt: new Date(),
     })

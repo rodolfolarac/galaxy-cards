@@ -21,12 +21,21 @@ frase de exemplo. Google Cloud TTS com vozes neurais quando há chave configurad
 gerado fica guardado no banco, então a mesma palavra nunca custa uma segunda chamada. Sem chave,
 cai na voz do próprio navegador e tudo continua funcionando.
 
-**Fácil e difícil.**
+**Fácil e difícil.** Cada "fácil" seguido afasta a carta mais 15 dias:
 
-- **Fácil** → a carta sai do baralho. Na primeira vez volta em 1 semana; depois o intervalo
-  cresce multiplicando pelo fator de facilidade (7 dias → ~18 dias → ~48 dias…), até 1 ano.
-- **Difícil** → a carta volta para o fim da fila do baralho atual e reaparece na mesma sessão,
-  com o fator de facilidade reduzido.
+| Acertos seguidos | A carta volta em |
+| --- | --- |
+| 1º fácil | 15 dias |
+| 2º fácil | 30 dias |
+| 3º fácil | 45 dias |
+| 4º fácil | **nunca** — vira permanente |
+
+Aos 60 dias a palavra sai do baralho de vez. Ela continua no acervo, marcada como
+**permanente**, e só volta se você devolvê-la pelo painel.
+
+**Difícil** derruba a escada para zero e devolve a carta ao baralho na hora — errar uma vez
+recomeça do primeiro degrau. Dentro do mesmo baralho, uma carta difícil reaparece no máximo
+uma vez, para a sessão sempre terminar com o resumo.
 
 O botão "Fácil" mostra, antes do clique, exatamente em quanto tempo aquela carta volta.
 
@@ -106,12 +115,9 @@ Google Cloud Text-to-Speech.
 Tudo está em `server/lib/srs.ts`, no topo do arquivo:
 
 ```ts
-export const FIRST_EASY_INTERVAL = 7;      // dias no primeiro "fácil"
-export const MASTERED_THRESHOLD_DAYS = 7;  // a partir daqui conta como memorizada
-export const MIN_EASE = 1.3;
-export const MAX_EASE = 3.2;
-export const MAX_INTERVAL_DAYS = 365;
+export const STEP_DAYS = 15;            // tamanho de cada degrau
+export const PERMANENT_AFTER_DAYS = 60; // aqui a carta sai do baralho de vez
 ```
 
-Quer que "fácil" segure a carta por 3 dias em vez de 7? Troque `FIRST_EASY_INTERVAL` e rode de
-novo. O resto se ajusta sozinho, inclusive o texto do botão.
+Quer degraus de 10 dias parando em 90? Troque os dois números. O resto se ajusta sozinho — os
+degraus, o rótulo do botão, o contador de acertos no painel e os testes.

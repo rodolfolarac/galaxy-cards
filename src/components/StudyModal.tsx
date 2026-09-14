@@ -123,7 +123,9 @@ export function StudyModal({ session, deck, onClose }: Props) {
 
         setToast(
           rating === 'easy'
-            ? `“${current.word}” volta em ${res.nextIn}`
+            ? res.retired
+              ? `“${current.word}” está memorizada — saiu do baralho de vez`
+              : `“${current.word}” volta em ${res.nextIn}`
             : requeue
               ? `“${current.word}” volta ainda neste baralho`
               : `“${current.word}” fica para o próximo baralho`,
@@ -306,13 +308,17 @@ export function StudyModal({ session, deck, onClose }: Props) {
   );
 }
 
-/** Rótulo do intervalo que a carta ganha se for marcada como fácil agora. */
+/**
+ * Rótulo do degrau que a carta ganha se for marcada como fácil agora:
+ * 15 → 30 → 45 → 60 dias, e no quarto acerto ela vira permanente.
+ */
+const STEP_DAYS = 15;
+const PERMANENT_AFTER_DAYS = 60;
+
 function nextEasyLabel(card: Card): string {
-  if (card.intervalDays < 7) return 'volta em 1 semana';
-  const days = Math.round(card.intervalDays * Math.min(card.ease + 0.15, 3.2));
-  if (days >= 365) return 'volta em 1 ano';
-  if (days >= 30) return `volta em ${Math.round(days / 30)} ${days >= 60 ? 'meses' : 'mês'}`;
-  return `volta em ${Math.round(days / 7)} semanas`;
+  const days = Math.min((card.streak + 1) * STEP_DAYS, PERMANENT_AFTER_DAYS);
+  if (days >= PERMANENT_AFTER_DAYS) return 'sai do baralho de vez';
+  return `volta em ${days} dias`;
 }
 
 /**
