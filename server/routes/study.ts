@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { and, asc, desc, eq, lte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, lte, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { cards, reviews, studySessions } from '../db/schema.js';
 import { describeInterval, schedule, shuffle } from '../lib/srs.js';
@@ -12,6 +12,8 @@ const openInput = z.object({
   count: z.number().int().positive().max(1000).nullable().optional(),
   /** Se faltarem cartas vencidas, completa com as agendadas mais próximas. */
   includeFuture: z.boolean().optional().default(false),
+  /** Baralho dirigido: só estas cartas, ignorando prazo e quantidade. */
+  cardIds: z.array(z.number().int().positive()).max(1000).optional(),
 });
 
 /** Quantas cartas estão disponíveis agora (para o seletor de tamanho). */
@@ -51,13 +53,30 @@ studyRouter.get('/active', async (_req, res) => {
 studyRouter.post('/open', async (req, res) => {
   const parsed = openInput.safeParse(req.body ?? {});
   if (!parsed.success) { res.status(400).json({ error: 'Parâmetros inválidos.' }); return; }
-  const { count: requested, includeFuture } = parsed.data;
+  const { count: requested, includeFuture, cardIds } = parsed.data;
 
   // Encerra qualquer sessão pendurada antes de abrir outra.
   await db
     .update(studySessions)
     .set({ status: 'aborted', endedAt: new Date() })
     .where(eq(studySessions.status, 'active'));
+
+  // Rodada dirigida (o "revisar as difíceis" do resumo): usa exatamente
+  // as cartas pedidas, sem olhar prazo nem quantidade.
+  if (cardIds?.length) {
+    const picked = await db.select().from(cards).where(inArray(cards.id, cardIds));
+    if (!picked.length) {
+      res.status(409).json({ error: 'Essas cartas não existem mais.' });
+      return;
+    }
+    const deck = shuffle(picked);
+    const [session] = await db
+      .insert(studySessions)
+      .values({ requestedCount: deck.length, queuedCount: deck.length, status: 'active' })
+      .returning();
+    res.status(201).json({ session, cards: deck });
+    return;
+  }
 
   const now = new Date();
   const dueCards = await db

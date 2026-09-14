@@ -74,10 +74,10 @@ export const api = {
 
   // ── estudo ──
   available: () => request<{ due: number; total: number }>('/study/available'),
-  openDeck: (count: number | null, includeFuture = false) =>
+  openDeck: (count: number | null, includeFuture = false, cardIds?: number[]) =>
     request<{ session: StudySession; cards: Card[] }>('/study/open', {
       method: 'POST',
-      body: JSON.stringify({ count, includeFuture }),
+      body: JSON.stringify({ count, includeFuture, cardIds }),
     }),
   review: (
     sessionId: number,

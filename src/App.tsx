@@ -77,11 +77,22 @@ export default function App() {
 
       {study && (
         <StudyModal
+          key={study.session.id}
           session={study.session}
           deck={study.deck}
-          onClose={() => {
-            setStudy(null);
+          onClose={async (_summary, replayIds) => {
             refreshSummary();
+            // "Revisar as difíceis": abre uma rodada nova só com elas.
+            if (replayIds?.length) {
+              try {
+                const { session, cards } = await api.openDeck(null, false, replayIds);
+                setStudy({ session, deck: cards });
+                return;
+              } catch {
+                // Se não der para reabrir, apenas fecha o modal.
+              }
+            }
+            setStudy(null);
           }}
         />
       )}

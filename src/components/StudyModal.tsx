@@ -10,8 +10,17 @@ import { Button, cx } from './ui';
 interface Props {
   session: StudySession;
   deck: Card[];
-  onClose: (summary: StudySession) => void;
+  /** `replayIds` pede uma rodada nova só com as cartas difíceis. */
+  onClose: (summary: StudySession, replayIds?: number[]) => void;
 }
+
+/**
+ * Quantas vezes uma carta difícil volta dentro do mesmo baralho.
+ * Sem esse teto, marcar tudo como difícil faz a fila nunca esvaziar e o
+ * baralho recomeçar para sempre. Com 1, a sessão termina em no máximo
+ * duas passadas e o resumo sempre aparece.
+ */
+const MAX_REPEATS_PER_CARD = 1;
 
 interface Answered {
   cardId: number;
@@ -32,6 +41,8 @@ export function StudyModal({ session, deck, onClose }: Props) {
   const [done, setDone] = useState<StudySession | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
+  /** Quantas vezes cada carta já voltou à fila nesta sessão. */
+  const repeats = useRef(new Map<number, number>());
   const startedAt = useRef(Date.now());
   const cardShownAt = useRef(Date.now());
   const cancelSpeech = useRef<(() => void) | null>(null);
@@ -101,16 +112,21 @@ export function StudyModal({ session, deck, onClose }: Props) {
 
         setAnswered((a) => [...a, { cardId: current.id, word: current.word, rating, nextIn: res.nextIn }]);
 
+        const seen = repeats.current.get(current.id) ?? 0;
+        const requeue = rating === 'hard' && seen < MAX_REPEATS_PER_CARD;
+        if (requeue) repeats.current.set(current.id, seen + 1);
+
         setQueue((q) => {
           const rest = q.slice(1);
-          // Difícil volta ao fim da fila — "sempre deve aparecer".
-          return rating === 'hard' ? [...rest, { ...current, ...res.card }] : rest;
+          return requeue ? [...rest, { ...current, ...res.card }] : rest;
         });
 
         setToast(
           rating === 'easy'
             ? `“${current.word}” volta em ${res.nextIn}`
-            : `“${current.word}” volta ainda neste baralho`,
+            : requeue
+              ? `“${current.word}” volta ainda neste baralho`
+              : `“${current.word}” fica para o próximo baralho`,
         );
       } catch (err) {
         setToast(err instanceof Error ? err.message : 'Não foi possível salvar a resposta.');
@@ -180,7 +196,12 @@ export function StudyModal({ session, deck, onClose }: Props) {
       className="fixed inset-0 z-50 flex flex-col bg-void/88 backdrop-blur-md"
     >
       {done ? (
-        <SessionSummary session={done} answered={answered} onClose={() => onClose(done)} />
+        <SessionSummary
+          session={done}
+          answered={answered}
+          deckSize={deck.length}
+          onClose={(replayIds) => onClose(done, replayIds)}
+        />
       ) : (
         <>
           {/* ── topo: constelação de progresso + cronômetro ── */}
@@ -374,15 +395,21 @@ function ConfirmQuit({
 function SessionSummary({
   session,
   answered,
+  deckSize,
   onClose,
 }: {
   session: StudySession;
   answered: Answered[];
-  onClose: () => void;
+  deckSize: number;
+  onClose: (replayIds?: number[]) => void;
 }) {
   const easy = answered.filter((a) => a.rating === 'easy');
   const hard = answered.filter((a) => a.rating === 'hard');
-  const uniqueEasy = new Set(easy.map((a) => a.cardId)).size;
+  const uniqueEasy = new Map(easy.map((a) => [a.cardId, a]));
+  // Difícil que nunca chegou a ser marcada como fácil continua pendente.
+  const stillHard = [...new Map(hard.map((a) => [a.cardId, a])).values()].filter(
+    (a) => !uniqueEasy.has(a.cardId),
+  );
   const interrupted = session.status === 'aborted';
 
   return (
@@ -396,22 +423,28 @@ function SessionSummary({
         </h2>
         <p className="mt-2 text-center text-sm text-dust">
           {interrupted
-            ? 'Tudo o que você respondeu foi salvo.'
-            : 'Todas as cartas do baralho foram respondidas.'}
+            ? `Você respondeu ${answered.length} de ${deckSize} cartas. Tudo foi salvo.`
+            : `Você passou pelas ${deckSize} cartas do baralho.`}
         </p>
 
         <dl className="mt-7 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-ridge bg-white/8 sm:grid-cols-4">
-          <Stat label="Cartas" value={answered.length} />
-          <Stat label="Memorizadas" value={uniqueEasy} tone="cyan" />
-          <Stat label="Repetições" value={hard.length} tone="amber" />
+          <Stat label="Respostas" value={answered.length} />
+          <Stat label="Fáceis" value={easy.length} tone="cyan" />
+          <Stat label="Difíceis" value={hard.length} tone="amber" />
           <Stat label="Tempo" value={formatDuration(session.durationMs)} />
         </dl>
 
-        {easy.length > 0 && (
+        <p className="mt-3 text-center text-xs text-faint">
+          {uniqueEasy.size} {uniqueEasy.size === 1 ? 'palavra saiu' : 'palavras saíram'} do baralho
+          {answered.length > 0 &&
+            ` · ${formatDuration(Math.round(session.durationMs / answered.length))} por carta`}
+        </p>
+
+        {uniqueEasy.size > 0 && (
           <div className="mt-6">
             <p className="mb-2 text-sm text-dust">Saíram do baralho</p>
             <ul className="flex flex-wrap gap-1.5">
-              {[...new Map(easy.map((a) => [a.cardId, a])).values()].map((a) => (
+              {[...uniqueEasy.values()].map((a) => (
                 <li
                   key={a.cardId}
                   className="rounded-lg border border-cyan/25 bg-cyan/10 px-2.5 py-1 text-sm"
@@ -424,9 +457,44 @@ function SessionSummary({
           </div>
         )}
 
-        <Button size="lg" onClick={onClose} className="mt-7 w-full">
-          Voltar ao baralho
-        </Button>
+        {stillHard.length > 0 && (
+          <div className="mt-5">
+            <p className="mb-2 text-sm text-dust">
+              Continuam no baralho{' '}
+              <span className="text-faint">— voltam no próximo que você abrir</span>
+            </p>
+            <ul className="flex flex-wrap gap-1.5">
+              {stillHard.map((a) => (
+                <li
+                  key={a.cardId}
+                  className="rounded-lg border border-amber/25 bg-amber/10 px-2.5 py-1 text-sm"
+                >
+                  <span className="font-reader">{a.word}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <div className="mt-7 grid gap-3">
+          {stillHard.length > 0 && (
+            <Button
+              size="lg"
+              onClick={() => onClose(stillHard.map((a) => a.cardId))}
+              className="w-full"
+            >
+              Revisar as {stillHard.length} difíceis agora
+            </Button>
+          )}
+          <Button
+            size="lg"
+            variant={stillHard.length > 0 ? 'outline' : 'primary'}
+            onClick={() => onClose()}
+            className="w-full"
+          >
+            Voltar ao baralho
+          </Button>
+        </div>
       </div>
     </div>
   );
