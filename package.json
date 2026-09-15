@@ -13,7 +13,7 @@
     "db:push": "drizzle-kit push --force",
     "db:studio": "drizzle-kit studio",
     "passcode": "tsx scripts/passcode.ts",
-    "test": "tsx scripts/test-srs.ts",
+    "test": "tsx scripts/test-srs.ts && tsx scripts/test-cards.ts",
     "db:migrate": "drizzle-kit migrate"
   },
   "dependencies": {

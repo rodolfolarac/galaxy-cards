@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { and, count, desc, eq, ilike, lte, or, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { cards } from '../db/schema.js';
+import { duplicateMessage, findDuplicate, normalizeWord } from '../lib/duplicates.js';
 
 export const cardsRouter = Router();
 
@@ -15,6 +16,10 @@ const cardInput = z.object({
 });
 
 const blank = (v: string | null | undefined) => (v && v.length ? v : null);
+
+/** Palavras já cadastradas, arquivadas incluídas, para barrar repetidos. */
+const existingWords = () =>
+  db.select({ id: cards.id, word: cards.word, archived: cards.archived }).from(cards);
 
 /** Lista com busca, filtro e paginação. */
 cardsRouter.get('/', async (req, res) => {
@@ -84,6 +89,11 @@ cardsRouter.post('/', async (req, res) => {
     return;
   }
   const d = parsed.data;
+  const duplicate = findDuplicate(d.word, await existingWords());
+  if (duplicate) {
+    res.status(409).json({ error: duplicateMessage(duplicate) });
+    return;
+  }
   const [row] = await db
     .insert(cards)
     .values({
@@ -106,6 +116,9 @@ cardsRouter.post('/bulk', async (req, res) => {
     return;
   }
 
+  const existing = await existingWords();
+  /** Chave normalizada → número da primeira linha que a trouxe. */
+  const seen = new Map<string, number>();
   const values = [];
   const errors: string[] = [];
   for (const [i, line] of lines.entries()) {
@@ -115,6 +128,18 @@ cardsRouter.post('/bulk', async (req, res) => {
       errors.push(`Linha ${i + 1}: precisa de "palavra ; tradução".`);
       continue;
     }
+    const duplicate = findDuplicate(word, existing);
+    if (duplicate) {
+      errors.push(`Linha ${i + 1}: ${duplicateMessage(duplicate)}`);
+      continue;
+    }
+    const key = normalizeWord(word);
+    const firstLine = seen.get(key);
+    if (firstLine) {
+      errors.push(`Linha ${i + 1}: “${word}” repete a linha ${firstLine}.`);
+      continue;
+    }
+    seen.set(key, i + 1);
     values.push({
       word,
       translation,
@@ -139,6 +164,13 @@ cardsRouter.patch('/:id', async (req, res) => {
     return;
   }
   const d = parsed.data;
+  if (d.word !== undefined) {
+    const duplicate = findDuplicate(d.word, await existingWords(), id);
+    if (duplicate) {
+      res.status(409).json({ error: duplicateMessage(duplicate) });
+      return;
+    }
+  }
   const [row] = await db
     .update(cards)
     .set({
